@@ -7,18 +7,14 @@ from prophet.plot import plot_plotly
 import altair as alt
 import numpy as np
 
-
 # 1. CONFIGURATION 
-
 START = "2015-01-01"
 TODAY = date.today().strftime("%Y-%m-%d")
 
 st.set_page_config(page_title="AI Stock Predictor", layout="wide")
 st.title("📈 AI-Powered Stock Forecasting & Visualization Dashboard")
 
-
 # 2. SIDEBAR SETTINGS 
-
 with st.sidebar:
     st.header("Control Panel")
     stocks = (
@@ -51,24 +47,21 @@ with st.sidebar:
     
     predict_button = st.button("Generate AI Prediction")
     st.info("The model uses Meta's Prophet algorithm to decompose trends and seasonality.")
-    
 
 # 3. DATA LOADING & CLEANING
-
 @st.cache_data
 def load_data(ticker):
-    data = yf.download(ticker, START, TODAY)
-    
+    data = yf.download(ticker, start=START, end=TODAY)
+    if data.empty:
+        return pd.DataFrame()
     if isinstance(data.columns, pd.MultiIndex):
         data.columns = data.columns.get_level_values(0)
     data.reset_index(inplace=True)
     data['Date'] = pd.to_datetime(data['Date'])
     return data
 
-
 @st.cache_resource
 def get_prediction(df, days):
-    
     df_train = df[['Date', 'Close']].rename(columns={"Date": "ds", "Close": "y"})
     m = Prophet()
     m.fit(df_train)
@@ -76,68 +69,64 @@ def get_prediction(df, days):
     forecast = m.predict(future)
     return m, forecast
 
-
 data = load_data(selected_stock)
 
- 
-if selected_stock.endswith(".NS") or selected_stock.endswith(".BO"):
-    currency_symbol = "₹"
+if data.empty:
+    st.error(f"No data found for {selected_stock}. The ticker might be delisted or API is throttled.")
 else:
-    currency_symbol = "$"
+    if selected_stock.endswith(".NS") or selected_stock.endswith(".BO"):
+        currency_symbol = "₹"
+    else:
+        currency_symbol = "$"
 
+    col_left, col_right = st.columns([3, 1])
 
-col_left, col_right = st.columns([3, 1])
+    with col_left:
+        st.subheader(f"Historical Price Action: {selected_stock}")
+        base = alt.Chart(data).encode(x='Date:T')
+        line = base.mark_line(color='#1f77b4').encode(y=alt.Y('Close:Q', title=f'Price ({currency_symbol})'))
+        st.altair_chart(line.properties(height=400).interactive(), use_container_width=True)
 
-with col_left:
-    st.subheader(f"Historical Price Action: {selected_stock}")
-    base = alt.Chart(data).encode(x='Date:T')
-    # Updated chart axis to use dynamic currency
-    line = base.mark_line(color='#1f77b4').encode(y=alt.Y('Close:Q', title=f'Price ({currency_symbol})'))
-    st.altair_chart(line.properties(height=400).interactive(), use_container_width=True)
-
-with col_right:
-    st.subheader("Latest Market Data")
-    last_price = data['Close'].iloc[-1]
-    prev_price = data['Close'].iloc[-2]
-    change = last_price - prev_price
-   
-    st.metric("Current Price", f"{currency_symbol}{last_price:.2f}", f"{change:.2f}")
-    st.write("Recent Logs", data.tail(5))
-
-
-if predict_button:
-    st.divider()
-    with st.spinner("AI is analyzing historical cycles and trends..."):
-        model, forecast = get_prediction(data, period)
-        
-        st.subheader('🚀 Future Forecast Analysis')
-
-
-        # Forecast Plot
-        fig1 = plot_plotly(model, forecast)
-        fig1.update_layout(title=f"Forecast for {selected_stock} ({n_years} Years Out)")
-        st.plotly_chart(fig1, use_container_width=True)
-
-
-        # Download Section
-        st.subheader("📥 Export Forecast Data")
-        csv_data = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(period)
-        csv_data.columns = ['Date', 'Predicted_Price', 'Minimum_Expected', 'Maximum_Expected']
+    with col_right:
+        st.subheader("Latest Market Data")
+        last_price = data['Close'].iloc[-1]
+        if len(data) > 1:
+            prev_price = data['Close'].iloc[-2]
+            change = last_price - prev_price
+        else:
+            change = 0
        
-        csv_data['Date'] = csv_data['Date'].dt.strftime('%Y-%m-%d')
-        
-        csv = csv_data.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="Download Prediction as CSV",
-            data=csv,
-            file_name=f'{selected_stock}_forecast.csv',
-            mime='text/csv',
-        )
+        st.metric("Current Price", f"{currency_symbol}{last_price:.2f}", f"{change:.2f}")
+        st.write("Recent Logs", data.tail(5))
 
-        
-        with st.expander("Show AI Logic (Trend & Seasonality)"):
-            st.write("The model breaks the stock into these components:")
-            fig2 = model.plot_components(forecast)
-            st.pyplot(fig2)
-else:
-    st.info("Adjust the settings in the sidebar and click 'Generate AI Prediction' to start.")
+    if predict_button:
+        st.divider()
+        with st.spinner("AI is analyzing historical cycles and trends..."):
+            model, forecast = get_prediction(data, period)
+            
+            st.subheader('🚀 Future Forecast Analysis')
+
+            fig1 = plot_plotly(model, forecast)
+            fig1.update_layout(title=f"Forecast for {selected_stock} ({n_years} Years Out)")
+            st.plotly_chart(fig1, use_container_width=True)
+
+            st.subheader("📥 Export Forecast Data")
+            csv_data = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(period)
+            csv_data.columns = ['Date', 'Predicted_Price', 'Minimum_Expected', 'Maximum_Expected']
+           
+            csv_data['Date'] = csv_data['Date'].dt.strftime('%Y-%m-%d')
+            
+            csv = csv_data.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="Download Prediction as CSV",
+                data=csv,
+                file_name=f'{selected_stock}_forecast.csv',
+                mime='text/csv',
+            )
+            
+            with st.expander("Show AI Logic (Trend & Seasonality)"):
+                st.write("The model breaks the stock into these components:")
+                fig2 = model.plot_components(forecast)
+                st.pyplot(fig2)
+    else:
+        st.info("Adjust the settings in the sidebar and click 'Generate AI Prediction' to start.")
