@@ -45,13 +45,13 @@ with st.sidebar:
 
 @st.cache_data
 def load_data(ticker):
-    data = yf.download(ticker, start=START)
+    data = yf.download(ticker, start=START, auto_adjust=True)
     if data.empty:
         return pd.DataFrame()
     if isinstance(data.columns, pd.MultiIndex):
         data.columns = data.columns.get_level_values(0)
-    data.reset_index(inplace=True)
-    data['Date'] = pd.to_datetime(data['Date'])
+    data = data.reset_index()
+    data['Date'] = pd.to_datetime(data['Date']).dt.tz_localize(None)
     return data
 
 @st.cache_resource
@@ -68,24 +68,24 @@ data = load_data(selected_stock)
 if data.empty:
     st.error(f"No data found for {selected_stock}. The ticker might be delisted or API is throttled.")
 else:
-    if selected_stock.endswith(".NS") or selected_stock.endswith(".BO"):
-        currency_symbol = "₹"
-    else:
-        currency_symbol = "$"
+    currency_symbol = "₹" if (selected_stock.endswith(".NS") or selected_stock.endswith(".BO")) else "$"
 
     col_left, col_right = st.columns([3, 1])
 
     with col_left:
         st.subheader(f"Historical Price Action: {selected_stock}")
-        base = alt.Chart(data).encode(x='Date:T')
-        line = base.mark_line(color='#1f77b4').encode(y=alt.Y('Close:Q', title=f'Price ({currency_symbol})'))
-        st.altair_chart(line.properties(height=400).interactive(), use_container_width=True)
+        chart = alt.Chart(data).mark_line(color='#1f77b4').encode(
+            x=alt.X('Date:T', title='Date'),
+            y=alt.Y('Close:Q', title=f'Price ({currency_symbol})'),
+            tooltip=['Date:T', 'Close:Q']
+        ).properties(height=400).interactive()
+        st.altair_chart(chart, use_container_width=True)
 
     with col_right:
         st.subheader("Latest Market Data")
-        last_price = data['Close'].iloc[-1]
+        last_price = float(data['Close'].iloc[-1])
         if len(data) > 1:
-            prev_price = data['Close'].iloc[-2]
+            prev_price = float(data['Close'].iloc[-2])
             change = last_price - prev_price
         else:
             change = 0
