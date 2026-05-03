@@ -45,12 +45,17 @@ with st.sidebar:
 
 @st.cache_data
 def load_data(ticker):
-    data = yf.download(ticker, start=START, auto_adjust=True)
+    
+    data = yf.download(ticker, start=START, period="max", auto_adjust=True)
+    
     if data.empty:
         return pd.DataFrame()
+    
     if isinstance(data.columns, pd.MultiIndex):
         data.columns = data.columns.get_level_values(0)
+    
     data = data.reset_index()
+    
     data['Date'] = pd.to_datetime(data['Date']).dt.tz_localize(None)
     return data
 
