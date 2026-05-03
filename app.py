@@ -7,14 +7,11 @@ from prophet.plot import plot_plotly
 import altair as alt
 import numpy as np
 
-# 1. CONFIGURATION 
 START = "2015-01-01"
-TODAY = date.today().strftime("%Y-%m-%d")
 
 st.set_page_config(page_title="AI Stock Predictor", layout="wide")
 st.title("📈 AI-Powered Stock Forecasting & Visualization Dashboard")
 
-# 2. SIDEBAR SETTINGS 
 with st.sidebar:
     st.header("Control Panel")
     stocks = (
@@ -41,17 +38,14 @@ with st.sidebar:
         "SWIGGY.NS", "UNIONBANK.NS","GMBREW.NS"
     ) 
     selected_stock = st.selectbox("Select Stock Ticker", stocks)
-    
     n_years = st.slider("Forecast Period (Years):", 1, 5)
     period = n_years * 365
-    
     predict_button = st.button("Generate AI Prediction")
     st.info("The model uses Meta's Prophet algorithm to decompose trends and seasonality.")
 
-# 3. DATA LOADING & CLEANING
 @st.cache_data
 def load_data(ticker):
-    data = yf.download(ticker, start=START, end=TODAY)
+    data = yf.download(ticker, start=START)
     if data.empty:
         return pd.DataFrame()
     if isinstance(data.columns, pd.MultiIndex):
@@ -103,7 +97,6 @@ else:
         st.divider()
         with st.spinner("AI is analyzing historical cycles and trends..."):
             model, forecast = get_prediction(data, period)
-            
             st.subheader('🚀 Future Forecast Analysis')
 
             fig1 = plot_plotly(model, forecast)
@@ -113,9 +106,7 @@ else:
             st.subheader("📥 Export Forecast Data")
             csv_data = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(period)
             csv_data.columns = ['Date', 'Predicted_Price', 'Minimum_Expected', 'Maximum_Expected']
-           
             csv_data['Date'] = csv_data['Date'].dt.strftime('%Y-%m-%d')
-            
             csv = csv_data.to_csv(index=False).encode('utf-8')
             st.download_button(
                 label="Download Prediction as CSV",
